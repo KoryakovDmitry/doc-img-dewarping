@@ -1,1 +1,3 @@
 test_imgs
+text_line_segmentation/det_r50_vd_sast_icdar15_v2.0_train
+PaddleOCR
