@@ -10,19 +10,20 @@ from PIL import Image
 path = "../test_imgs/33.jpg"
 # Read gray image
 img = cv2.imread(path, 0)
+img_denoised = cv2.fastNlMeansDenoising(img)
 
 # Create default parametrization LSD
 lsd = cv2.createLineSegmentDetector(0)
 
 # Detect lines in the image
-lines = lsd.detect(img)[0]  # Position 0 of the returned tuple are the detected lines
+lines = lsd.detect(img_denoised)[0]  # Position 0 of the returned tuple are the detected lines
 
 # Draw detected lines in the image
 # drawn_img = lsd.drawSegments(img, lines)
 lengs = np.hypot(abs(lines[:, 0, 0] - lines[:, 0, 2]), abs(lines[:, 0, 1] - lines[:, 0, 3]))
 mean_leng = lengs.mean()
 
-drawn_img = img.copy()
+drawn_img = img_denoised.copy()
 for i_ in lines:
     i = i_[0]
     start_point = (int(i[0]), int(i[1]))
