@@ -62,6 +62,10 @@ def plot_border_corrected(img_plot, destination_pts_, points_, add_x=0, add_y=0)
         )
 
     Image.fromarray(img_plot[:, :, ::-1]).show()
+
+    save_to = f"/Users/dmitry/Initflow/doc-img-dewarping/dewarp_homo/"
+    name = str(points_[0]).replace(",", "").replace(".", "").replace(" ", "").replace("[", "").replace("]", "")+".jpg"
+    cv2.imwrite(osp.join(save_to, name), img_plot)
     return img_plot
 
 
@@ -189,39 +193,149 @@ def sort_clockwise(points_inp):
         return points_inp
 
 
-def get_destination_points(pts_src, border):
-    """
-    -Get destination points from pts_src of warped images
-    -Approximating height and width of the rectangle: we take maximum of the 2 widths and 2 heights
+def get_destination_points(points, border, img_plot):
+    assert (
+        points[0] == border[0][-1][0][1]
+    ), f"need the same start point {points[0]} {border[0][-1][0][1]}"
 
-    Args:
-        pts_src: np.array
-        border: list
+    destination_pts = {"t": [], "r": [], "b": [], "l": []}
+    clock_idxs = [c[1][1] for c in border if c[1][1] != 0]
+    points = np.array(points)
+    reverse_direction_x_y = 0
+    destination_pts["t"].append([0, 0])
+    prev = [0, 0]
+    shapes = {"t": 0, "r": 0, "l": 0, "b": 0}
 
-    Returns:
-        destination_pts: list
-        height: int
-        width: int
+    for pt_i_next in range(1, len(points)):
+        pt_i = pt_i_next - 1
+        pt = points[pt_i]
+        pt_next = points[pt_i_next]
 
-    """
-    w1 = np.hypot(
-        abs(pts_src[0][0] - pts_src[1][0]), abs(pts_src[0][1] - pts_src[1][1])
+        if pt_i in clock_idxs:
+            reverse_direction_x_y += 1
+
+        hypot = np.hypot(
+            abs(pt[0] - pt_next[0]),
+            abs(pt[1] - pt_next[1]),
+        )
+
+        # img_plot_ = img_plot.copy()
+        #
+        # p = np.array(pt).astype(int)
+        # img_plot_ = cv2.circle(
+        #     img_plot_,
+        #     (p[0], p[1]),
+        #     radius=10,
+        #     color=(200, 100, 255),
+        #     thickness=-1,
+        # )
+        #
+        # p = np.array(pt_next).astype(int)
+        # img_plot_ = cv2.circle(
+        #     img_plot_,
+        #     (p[0], p[1]),
+        #     radius=10,
+        #     color=(200, 100, 255),
+        #     thickness=-1,
+        # )
+        # Image.fromarray(img_plot_[:, :, ::-1]).show()
+
+        if reverse_direction_x_y == 0:
+            shapes["t"] += hypot
+            destination_pts["t"].append([prev[0] + hypot, 0])
+            prev = [prev[0] + hypot, 0]
+        elif reverse_direction_x_y == 1:
+            shapes["r"] += hypot
+            destination_pts["r"].append([prev[0] - 1, prev[1] + hypot])
+            prev = [prev[0] - 1, prev[1] + hypot]
+        elif reverse_direction_x_y == 2:
+            shapes["b"] += hypot
+            destination_pts["b"].append([prev[0] - hypot, prev[1] - 1])
+            prev = [prev[0] - hypot, prev[1] - 1]
+        elif reverse_direction_x_y == 3:
+            shapes["l"] += hypot
+            destination_pts["l"].append([prev[0] - 1, prev[1] - hypot])
+            prev = [prev[0] - 1, prev[1] - hypot]
+        else:
+            h = None
+    else:
+        pt_i = 0
+        pt = points[pt_i]
+        pt_next = points[pt_i_next]
+
+        hypot = np.hypot(
+            abs(pt[0] - pt_next[0]),
+            abs(pt[1] - pt_next[1]),
+        )
+        shapes["l"] += hypot
+        destination_pts["l"].append([prev[0] - 1, prev[1] - hypot])
+
+    # img_plot = cv2.copyMakeBorder(
+    #     img_plot, 500, 500, 500, 500, cv2.BORDER_CONSTANT, value=(255, 255, 255)
+    # )
+
+    # img_plot_ = plot_border_corrected(
+    #     img_plot, destination_pts, points, add_x=1000, add_y=500
+    # )
+
+    delta_w = abs(shapes["t"] - shapes["b"])
+    delta_h = abs(shapes["l"] - shapes["r"])
+    max_w_side_name = max(shapes, key=lambda x: shapes[x] if x in ("t", "b") else -1)
+    max_h_side_name = max(shapes, key=lambda x: shapes[x] if x in ("l", "r") else -1)
+
+    min_w_side_name = "b" if max_w_side_name == "t" else "t"
+    min_h_side_name = "r" if max_h_side_name == "l" else "l"
+
+    l_d_w = len(destination_pts["t"]) - 1
+    l_d_h = len(destination_pts["l"])
+    # l_d_w = len(destination_pts[min_w_side_name])
+    # l_d_h = len(destination_pts[min_h_side_name])
+
+    # l_d_w = l_d_w - 1 if min_w_side_name == "t" else l_d_w
+    # l_d_h = l_d_h if min_h_side_name == "r" else l_d_h
+
+    step_w = delta_w / l_d_w
+    step_h = delta_h / l_d_h
+
+    if min_w_side_name == "b":
+        for i in range(l_d_w):
+            destination_pts["t"][i][0] += step_w * (i + 1)
+
+    elif min_w_side_name == "t":
+        for n, i in enumerate(reversed(range(l_d_w))):
+            destination_pts[min_w_side_name][i][0] -= step_w * (n + 1)
+
+    if min_h_side_name == "r":
+        for n, i in enumerate(reversed(range(l_d_h))):
+            destination_pts["l"][i][1] += step_h * (n + 1)
+
+    elif min_h_side_name == "l":
+        for i in range(l_d_h):
+            destination_pts[min_h_side_name][i][1] -= step_h * (i + 1)
+    #
+
+    destination_pts["t"][0][0] = destination_pts["l"][-1][0]
+    destination_pts["l"] = destination_pts["l"][:-1]
+
+    # img_plot = plot_border_corrected(
+    #     img_plot, destination_pts, points, add_x=1000, add_y=500
+    # )
+
+    # img_plot = plot_border_corrected(
+    #     img_plot, destination_pts, points, add_x=500, add_y=0
+    # )
+    destination_pts_list = [i for l in destination_pts for i in destination_pts[l]]
+    destination_pts_list = np.array(destination_pts_list)
+    destination_pts_list_neg_min = np.min(destination_pts_list, axis=0)
+    destination_pts_list_neg_min = np.array(
+        [abs(_) if _ < 0 else 0 for _ in destination_pts_list_neg_min]
     )
-    w2 = np.hypot(
-        abs(pts_src[2][0] - pts_src[3][0]), abs(pts_src[2][1] - pts_src[3][1])
+    destination_pts_list = destination_pts_list + destination_pts_list_neg_min + 1
+    img_plot = plot_border_corrected(
+        img_plot, {"l": destination_pts_list}, points, add_x=0, add_y=0
     )
-    w = max(int(w1), int(w2))
 
-    h1 = np.hypot(
-        abs(pts_src[0][0] - pts_src[2][0]), abs(pts_src[0][1] - pts_src[2][1])
-    )
-    h2 = np.hypot(
-        abs(pts_src[1][0] - pts_src[3][0]), abs(pts_src[1][1] - pts_src[3][1])
-    )
-    h = max(int(h1), int(h2))
-
-    destination_pts = np.float32([(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)])
-    return destination_pts, h, w
+    return destination_pts_list, shapes[max_h_side_name], shapes[max_w_side_name]
 
 
 def unwarp(img, src, dst):
@@ -243,9 +357,13 @@ def unwarp(img, src, dst):
 
 
 def dewarp(image, pts_src):
-    destination_points, h, w = get_destination_points(pts_src)
-    un_warped = unwarp(image, np.float32(pts_src), destination_points)
-    return un_warped
+    destination_pts, h, w = get_destination_points(
+        points=points, border=close_90_cluster_sorted, img_plot=img_plot
+    )
+    h, w = int(np.round(h)), int(np.round(w))
+    un_warped = unwarp(image, np.float32(pts_src), np.float32(destination_pts))
+    cropped = un_warped[0:h, 0:w]
+    return un_warped, cropped
 
 
 def get_angle_between_two_lines(first_line, second_line):
@@ -441,149 +559,8 @@ if __name__ == "__main__":
 
             # Image.fromarray(img_plot[:, :, ::-1]).show()
 
-            # destination_pts, h, w = get_destination_points(pts_src=points, border=close_90_cluster_sorted)
+            # dewarp(image=img, pts_src=points)
+            un_warped, cropped = dewarp(image=img, pts_src=points)
 
-            ## DEV destination_pts
-            assert (
-                points[0] == close_90_cluster_sorted[0][-1][0][1]
-            ), f"need the same start point {points[0]} {close_90_cluster_sorted[0][-1][0][1]}"
-
-            destination_pts = {"t": [], "r": [], "b": [], "l": []}
-            clock_idxs = [c[1][1] for c in close_90_cluster_sorted if c[1][1] != 0]
-            points = np.array(points)
-            reverse_direction_x_y = 0
-            destination_pts["t"].append([0, 0])
-            prev = [0, 0]
-            shapes = {"t": 0, "r": 0, "l": 0, "b": 0}
-
-            for pt_i_next in range(1, len(points)):
-                pt_i = pt_i_next - 1
-                pt = points[pt_i]
-                pt_next = points[pt_i_next]
-
-                if pt_i in clock_idxs:
-                    reverse_direction_x_y += 1
-
-                hypot = np.hypot(
-                    abs(pt[0] - pt_next[0]),
-                    abs(pt[1] - pt_next[1]),
-                )
-
-                # img_plot_ = img_plot.copy()
-                #
-                # p = np.array(pt).astype(int)
-                # img_plot_ = cv2.circle(
-                #     img_plot_,
-                #     (p[0], p[1]),
-                #     radius=10,
-                #     color=(200, 100, 255),
-                #     thickness=-1,
-                # )
-                #
-                # p = np.array(pt_next).astype(int)
-                # img_plot_ = cv2.circle(
-                #     img_plot_,
-                #     (p[0], p[1]),
-                #     radius=10,
-                #     color=(200, 100, 255),
-                #     thickness=-1,
-                # )
-                # Image.fromarray(img_plot_[:, :, ::-1]).show()
-
-                if reverse_direction_x_y == 0:
-                    shapes["t"] += hypot
-                    destination_pts["t"].append([prev[0] + hypot, 0])
-                    prev = [prev[0] + hypot, 0]
-                elif reverse_direction_x_y == 1:
-                    shapes["r"] += hypot
-                    destination_pts["r"].append([prev[0] - 1, prev[1] + hypot])
-                    prev = [prev[0] - 1, prev[1] + hypot]
-                elif reverse_direction_x_y == 2:
-                    shapes["b"] += hypot
-                    destination_pts["b"].append([prev[0] - hypot, prev[1] - 1])
-                    prev = [prev[0] - hypot, prev[1] - 1]
-                elif reverse_direction_x_y == 3:
-                    shapes["l"] += hypot
-                    destination_pts["l"].append([prev[0] - 1, prev[1] - hypot])
-                    prev = [prev[0] - 1, prev[1] - hypot]
-                else:
-                    h = None
-            else:
-                pt_i = 0
-                pt = points[pt_i]
-                pt_next = points[pt_i_next]
-
-                hypot = np.hypot(
-                    abs(pt[0] - pt_next[0]),
-                    abs(pt[1] - pt_next[1]),
-                )
-                shapes["l"] += hypot
-                destination_pts["l"].append([prev[0] - 1, prev[1] - hypot])
-
-            img_plot = cv2.copyMakeBorder(
-                img_plot, 500, 500, 500, 500, cv2.BORDER_CONSTANT, value=(255, 255, 255)
-            )
-
-            img_plot_ = plot_border_corrected(
-                img_plot, destination_pts, points, add_x=1000, add_y=500
-            )
-
-            delta_w = abs(shapes["t"] - shapes["b"])
-            delta_h = abs(shapes["l"] - shapes["r"])
-            max_w_side_name = max(
-                shapes, key=lambda x: shapes[x] if x in ("t", "b") else -1
-            )
-            max_h_side_name = max(
-                shapes, key=lambda x: shapes[x] if x in ("l", "r") else -1
-            )
-
-            min_w_side_name = "b" if max_w_side_name == "t" else "t"
-            min_h_side_name = "r" if max_h_side_name == "l" else "l"
-
-            l_d_w = len(destination_pts["t"]) - 1
-            l_d_h = len(destination_pts["l"])
-            # l_d_w = len(destination_pts[min_w_side_name])
-            # l_d_h = len(destination_pts[min_h_side_name])
-
-            # l_d_w = l_d_w - 1 if min_w_side_name == "t" else l_d_w
-            # l_d_h = l_d_h if min_h_side_name == "r" else l_d_h
-
-            step_w = delta_w / l_d_w
-            step_h = delta_h / l_d_h
-
-            if min_w_side_name == "b":
-                for i in range(l_d_w):
-                    destination_pts["t"][i][0] += step_w * (i + 1)
-
-            elif min_w_side_name == "t":
-                for n, i in enumerate(reversed(range(l_d_w))):
-                    destination_pts[min_w_side_name][i][0] -= step_w * (n + 1)
-
-            if min_h_side_name == "r":
-                for n, i in enumerate(reversed(range(l_d_h))):
-                    destination_pts["l"][i][1] += step_h * (n + 1)
-
-            elif min_h_side_name == "l":
-                for i in range(l_d_h):
-                    destination_pts[min_h_side_name][i][1] -= step_h * (i + 1)
-            #
-
-            destination_pts["t"][0][0] = destination_pts["l"][-1][0]
-            destination_pts["l"] = destination_pts["l"][:-1]
-
-            img_plot = plot_border_corrected(
-                img_plot, destination_pts, points, add_x=1000, add_y=500
-            )
-
-            # img_plot = plot_border_corrected(
-            #     img_plot, destination_pts, points, add_x=500, add_y=0
-            # )
-
-            h = None
-
-        # pts = np.array(points).astype(int)
-        #
-        # for p in range(len(pts)):
-
-        # un_warped = dewarp(image=img, pts_src=pts)
-        # Image.fromarray(un_warped[:, :, ::-1]).show()
+            Image.fromarray(un_warped[:, :, ::-1]).show()
+            Image.fromarray(cropped[:, :, ::-1]).show()
