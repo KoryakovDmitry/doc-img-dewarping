@@ -6,6 +6,53 @@ from sympy.geometry import Line, Point2D
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import MinMaxScaler
 from joblib import Parallel, delayed
+from inference_segm import (
+    SegmInference,
+    plot_border_corrected as plot_border_corrected_,
+)
+from shapely.geometry import Polygon
+
+
+def get_destination_points_rect(corners):
+    """
+    -Get destination points from corners of warped images
+    -Approximating height and width of the rectangle: we take maximum of the 2 widths and 2 heights
+
+    Args:
+        corners: list
+
+    Returns:
+        destination_corners: list
+        height: int
+        width: int
+
+    """
+
+    w1 = np.sqrt(
+        (corners[0][0] - corners[1][0]) ** 2 + (corners[0][1] - corners[1][1]) ** 2
+    )
+    w2 = np.sqrt(
+        (corners[2][0] - corners[3][0]) ** 2 + (corners[2][1] - corners[3][1]) ** 2
+    )
+    w = max(int(w1), int(w2))
+
+    h1 = np.sqrt(
+        (corners[0][0] - corners[2][0]) ** 2 + (corners[0][1] - corners[2][1]) ** 2
+    )
+    h2 = np.sqrt(
+        (corners[1][0] - corners[3][0]) ** 2 + (corners[1][1] - corners[3][1]) ** 2
+    )
+    h = max(int(h1), int(h2))
+
+    destination_corners = np.float32([(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)])
+
+    # print('\nThe destination points are: \n')
+    # for index, c in enumerate(destination_corners):
+    #     character = chr(65 + index) + "'"
+    #     print(character, ':', c)
+
+    # print('\nThe approximated height and width of the original image is: \n', (h, w))
+    return destination_corners, h, w
 
 
 def plot_border_corrected(img_plot, destination_pts_, points_, add_x=0, add_y=0):
@@ -63,9 +110,9 @@ def plot_border_corrected(img_plot, destination_pts_, points_, add_x=0, add_y=0)
 
     Image.fromarray(img_plot[:, :, ::-1]).show()
 
-    save_to = f"/Users/dmitry/Initflow/doc-img-dewarping/dewarp_homo/"
-    name = str(points_[0]).replace(",", "").replace(".", "").replace(" ", "").replace("[", "").replace("]", "")+".jpg"
-    cv2.imwrite(osp.join(save_to, name), img_plot)
+    # save_to = f"/Users/dmitry/Initflow/doc-img-dewarping/dewarp_homo/"
+    # name = str(points_[0]).replace(",", "").replace(".", "").replace(" ", "").replace("[", "").replace("]", "")+".jpg"
+    # cv2.imwrite(osp.join(save_to, name), img_plot)
     return img_plot
 
 
@@ -351,15 +398,61 @@ def unwarp(img, src, dst):
 
     """
     h, w = img.shape[:2]
-    H, _ = cv2.findHomography(src, dst, method=cv2.RANSAC, ransacReprojThreshold=3.0)
+    H, _ = cv2.findHomography(src, dst, method=cv2.RANSAC, ransacReprojThreshold=9.0)
+    # H = cv2.getPerspectiveTransform(src, dst)
     un_warped = cv2.warpPerspective(img, H, (w, h), flags=cv2.INTER_LINEAR)
     return un_warped
 
 
-def dewarp(image, pts_src):
-    destination_pts, h, w = get_destination_points(
-        points=points, border=close_90_cluster_sorted, img_plot=img_plot
-    )
+def dewarp(image, pts_src, rect):
+    if rect:
+        pts_src = np.array(Polygon(pts_src).minimum_rotated_rectangle.exterior.coords)[
+            :-1
+        ]
+
+        # debug
+        img_plot = image.copy()
+        for n, p in enumerate(pts_src):
+            p = np.array(p).astype(int)
+            img_plot = cv2.circle(
+                img_plot, (p[0], p[1]), radius=10, color=(255, 255, 0), thickness=-1
+            )
+            img_plot = cv2.putText(
+                img_plot,
+                str(n),
+                (p[0] + 50, p[1] + 50),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (255, 0, 0),
+                2,
+                cv2.LINE_AA,
+            )
+        Image.fromarray(img_plot[:, :, ::-1]).show()
+        #
+
+        destination_pts, h, w = get_destination_points_rect(corners=pts_src)
+        destination_pts = order_points_clockwise(destination_pts)
+        for n, p in enumerate(destination_pts):
+            p = np.array(p).astype(int)
+            img_plot = cv2.circle(
+                img_plot, (p[0], p[1]), radius=10, color=(0, 255, 255), thickness=-1
+            )
+            img_plot = cv2.putText(
+                img_plot,
+                str(n),
+                (p[0] + 50, p[1] + 50),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (0, 0, 255),
+                2,
+                cv2.LINE_AA,
+            )
+        Image.fromarray(img_plot[:, :, ::-1]).show()
+        h = None
+    else:
+        destination_pts, h, w = get_destination_points(
+            points=pts_src, border=close_90_cluster_sorted, img_plot=image  # img_plot
+        )
     h, w = int(np.round(h)), int(np.round(w))
     un_warped = unwarp(image, np.float32(pts_src), np.float32(destination_pts))
     cropped = un_warped[0:h, 0:w]
@@ -381,19 +474,24 @@ if __name__ == "__main__":
     import os.path as osp
     from glob import glob
 
+    pts2pts = False
+
+    segm = SegmInference()
     base = os.getcwd()
     imgs = glob(osp.join(base, "test_imgs/*"))
+    # anns_dir = osp.join(base, "test_anns_4_pts/")
     anns_dir = osp.join(base, "test_anns/")
     for im_path in imgs:
         im_fn = osp.basename(im_path)
         img = cv2.imread(im_path)
 
-        with open(osp.join(anns_dir, im_fn.replace(".jpg", ".json"))) as f:
-            anns = json.load(f)
+        # with open(osp.join(anns_dir, im_fn.replace(".jpg", ".json"))) as f:
+        #     anns = json.load(f)
 
-        points = anns["shapes"][0]["points"]
+        points = segm.inference(img)
+        # points = anns["shapes"][0]["points"]
         # points = np.random.permutation(np.array(points)).tolist()
-
+        h = plot_border_corrected_(img.copy(), points)
         img_plot = img.copy()
         for n, p in enumerate(points):
             p = np.array(p).astype(int)
@@ -433,12 +531,46 @@ if __name__ == "__main__":
         #
         # Image.fromarray(img_plot[:, :, ::-1]).show()
 
-        if len(points) > 2:
-            angles = []
-            for prev_i in range(0, len(points) - 2):
-                prev_pt = points[prev_i]
-                now_pt = points[prev_i + 1]
-                next_pt = points[prev_i + 2]
+        if pts2pts:
+            if len(points) > 2:
+                angles = []
+                for prev_i in range(0, len(points) - 2):
+                    prev_pt = points[prev_i]
+                    now_pt = points[prev_i + 1]
+                    next_pt = points[prev_i + 2]
+
+                    first_line = [prev_pt, now_pt]
+                    second_line = [now_pt, next_pt]
+
+                    l_1 = np.array(first_line).astype(int)
+                    l_2 = np.array(second_line).astype(int)
+                    img_plot = cv2.line(
+                        img_plot,
+                        tuple(l_1[0]),
+                        tuple(l_1[1]),
+                        (255, 0, 255),
+                        thickness=3,
+                    )
+                    img_plot = cv2.line(
+                        img_plot,
+                        tuple(l_2[0]),
+                        tuple(l_2[1]),
+                        (255, 0, 255),
+                        thickness=3,
+                    )
+
+                    angle = get_angle_between_two_lines(first_line, second_line)
+                    angles.append(
+                        (
+                            abs(90 - angle),
+                            (prev_i, prev_i + 1, prev_i + 2),
+                            (first_line, second_line),
+                        )
+                    )
+
+                prev_pt = points[prev_i + 1]
+                now_pt = points[prev_i + 2]
+                next_pt = points[0]
 
                 first_line = [prev_pt, now_pt]
                 second_line = [now_pt, next_pt]
@@ -446,121 +578,110 @@ if __name__ == "__main__":
                 l_1 = np.array(first_line).astype(int)
                 l_2 = np.array(second_line).astype(int)
                 img_plot = cv2.line(
-                    img_plot, tuple(l_1[0]), tuple(l_1[1]), (255, 0, 255), thickness=3
+                    img_plot, tuple(l_1[0]), tuple(l_1[1]), (255, 255, 0), thickness=3
                 )
                 img_plot = cv2.line(
-                    img_plot, tuple(l_2[0]), tuple(l_2[1]), (255, 0, 255), thickness=3
+                    img_plot, tuple(l_2[0]), tuple(l_2[1]), (255, 255, 0), thickness=3
                 )
 
                 angle = get_angle_between_two_lines(first_line, second_line)
                 angles.append(
                     (
                         abs(90 - angle),
-                        (prev_i, prev_i + 1, prev_i + 2),
+                        (prev_i + 1, prev_i + 2, 0),
                         (first_line, second_line),
                     )
                 )
 
-            prev_pt = points[prev_i + 1]
-            now_pt = points[prev_i + 2]
-            next_pt = points[0]
+                prev_pt = points[prev_i + 2]
+                now_pt = points[0]
+                next_pt = points[1]
 
-            first_line = [prev_pt, now_pt]
-            second_line = [now_pt, next_pt]
+                first_line = [prev_pt, now_pt]
+                second_line = [now_pt, next_pt]
 
-            l_1 = np.array(first_line).astype(int)
-            l_2 = np.array(second_line).astype(int)
-            img_plot = cv2.line(
-                img_plot, tuple(l_1[0]), tuple(l_1[1]), (255, 255, 0), thickness=3
-            )
-            img_plot = cv2.line(
-                img_plot, tuple(l_2[0]), tuple(l_2[1]), (255, 255, 0), thickness=3
-            )
-
-            angle = get_angle_between_two_lines(first_line, second_line)
-            angles.append(
-                (
-                    abs(90 - angle),
-                    (prev_i + 1, prev_i + 2, 0),
-                    (first_line, second_line),
-                )
-            )
-
-            prev_pt = points[prev_i + 2]
-            now_pt = points[0]
-            next_pt = points[1]
-
-            first_line = [prev_pt, now_pt]
-            second_line = [now_pt, next_pt]
-
-            l_1 = np.array(first_line).astype(int)
-            l_2 = np.array(second_line).astype(int)
-            img_plot = cv2.line(
-                img_plot, tuple(l_1[0]), tuple(l_1[1]), (0, 255, 255), thickness=3
-            )
-            img_plot = cv2.line(
-                img_plot, tuple(l_2[0]), tuple(l_2[1]), (0, 255, 255), thickness=3
-            )
-
-            angle = get_angle_between_two_lines(first_line, second_line)
-            angles.append(
-                (abs(90 - angle), (prev_i + 2, 0, 1), (first_line, second_line))
-            )
-
-            clusters = to_cluster(
-                angles, range_cluster=len(angles) if len(angles) > 10 else len(angles)
-            )
-
-            close_90_cluster = clusters[
-                min(
-                    clusters,
-                    key=lambda l: np.mean([_[0] for _ in clusters[l]]),
-                )
-            ]
-
-            for i in close_90_cluster:
-                l_1 = np.array(i[-1][0]).astype(int)
-                l_2 = np.array(i[-1][1]).astype(int)
+                l_1 = np.array(first_line).astype(int)
+                l_2 = np.array(second_line).astype(int)
                 img_plot = cv2.line(
-                    img_plot, tuple(l_1[0]), tuple(l_1[1]), (0, 255, 0), thickness=3
+                    img_plot, tuple(l_1[0]), tuple(l_1[1]), (0, 255, 255), thickness=3
                 )
                 img_plot = cv2.line(
-                    img_plot, tuple(l_2[0]), tuple(l_2[1]), (0, 255, 0), thickness=3
-                )
-                img_plot = cv2.putText(
-                    img_plot,
-                    str(int(i[0])),
-                    (l_1[1][0] + 50, l_1[1][1] + 100),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 0, 255),
-                    2,
-                    cv2.LINE_AA,
+                    img_plot, tuple(l_2[0]), tuple(l_2[1]), (0, 255, 255), thickness=3
                 )
 
-            # Image.fromarray(img_plot[:, :, ::-1]).show()
-            assert len(close_90_cluster) == 4, f"need 4 pts not {len(close_90_cluster)}"
-
-            close_90_cluster_pts = np.array([_[-1][0][1] for _ in close_90_cluster])
-            picks_clockwised = order_points_clockwise(close_90_cluster_pts)
-            close_90_cluster_sorted = []
-            for pick in picks_clockwised:
-                c_i = np.argwhere(np.sum(close_90_cluster_pts == pick, axis=1) == 2)[0][
-                    0
-                ]
-                c = close_90_cluster[c_i]
-                close_90_cluster_sorted.append(c)
-
-            for p in picks_clockwised:
-                p = np.array(p).astype(int)
-                img_plot = cv2.circle(
-                    img_plot, (p[0], p[1]), radius=10, color=(0, 0, 255), thickness=-1
+                angle = get_angle_between_two_lines(first_line, second_line)
+                angles.append(
+                    (abs(90 - angle), (prev_i + 2, 0, 1), (first_line, second_line))
                 )
 
-            # Image.fromarray(img_plot[:, :, ::-1]).show()
+                if len(angles) > 4:
+                    clusters = to_cluster(
+                        angles,
+                        range_cluster=len(angles) if len(angles) > 10 else len(angles),
+                    )
 
-            # dewarp(image=img, pts_src=points)
-            un_warped, cropped = dewarp(image=img, pts_src=points)
+                    close_90_cluster = clusters[
+                        min(
+                            clusters,
+                            key=lambda l: np.mean([_[0] for _ in clusters[l]]),
+                        )
+                    ]
+                else:
+                    close_90_cluster = angles
 
+                for i in close_90_cluster:
+                    l_1 = np.array(i[-1][0]).astype(int)
+                    l_2 = np.array(i[-1][1]).astype(int)
+                    img_plot = cv2.line(
+                        img_plot, tuple(l_1[0]), tuple(l_1[1]), (0, 255, 0), thickness=3
+                    )
+                    img_plot = cv2.line(
+                        img_plot, tuple(l_2[0]), tuple(l_2[1]), (0, 255, 0), thickness=3
+                    )
+                    img_plot = cv2.putText(
+                        img_plot,
+                        str(int(i[0])),
+                        (l_1[1][0] + 50, l_1[1][1] + 100),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1,
+                        (0, 0, 255),
+                        2,
+                        cv2.LINE_AA,
+                    )
+
+                # Image.fromarray(img_plot[:, :, ::-1]).show()
+                assert (
+                    len(close_90_cluster) == 4
+                ), f"need 4 pts not {len(close_90_cluster)}"
+
+                close_90_cluster_pts = np.array([_[-1][0][1] for _ in close_90_cluster])
+                picks_clockwised = order_points_clockwise(close_90_cluster_pts)
+                close_90_cluster_sorted = []
+                for pick in picks_clockwised:
+                    c_i = np.argwhere(
+                        np.sum(close_90_cluster_pts == pick, axis=1) == 2
+                    )[0][0]
+                    c = close_90_cluster[c_i]
+                    close_90_cluster_sorted.append(c)
+
+                for p in picks_clockwised:
+                    p = np.array(p).astype(int)
+                    img_plot = cv2.circle(
+                        img_plot,
+                        (p[0], p[1]),
+                        radius=10,
+                        color=(0, 0, 255),
+                        thickness=-1,
+                    )
+
+                # Image.fromarray(img_plot[:, :, ::-1]).show()
+
+                # dewarp(image=img, pts_src=points)
+                un_warped, cropped = dewarp(image=img, pts_src=points, rect=False)
+
+                Image.fromarray(un_warped[:, :, ::-1]).show()
+                Image.fromarray(cropped[:, :, ::-1]).show()
+        else:
+            un_warped, cropped = dewarp(image=img, pts_src=points, rect=True)
             Image.fromarray(un_warped[:, :, ::-1]).show()
             Image.fromarray(cropped[:, :, ::-1]).show()
