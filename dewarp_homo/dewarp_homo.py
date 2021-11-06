@@ -141,8 +141,7 @@ def unwarp(img, src, dst):
 
 
 def dewarp(image, pts_src):
-    pts_src = np.array(Polygon(pts_src).minimum_rotated_rectangle.exterior.coords)[:-1]
-    pts_src = order_points_clockwise(pts_src)
+    pts_src = order_points_clockwise(picks_clockwised)
 
     # debug
     img_plot = image.copy()
@@ -208,10 +207,27 @@ def group_points(points, tol):
 
 
 def get_distance(ref, point):
-    # print('ref: {} , point: {}'.format(ref, point))
     x1, y1 = ref
     x2, y2 = point
     return math.hypot(x2 - x1, y2 - y1)
+
+
+def get_angle_between_two_lines(first_line, second_line):
+    first_line = Line(Point2D(first_line[0]), Point2D(first_line[1]))
+    second_line = Line(Point2D(second_line[0]), Point2D(second_line[1]))
+    return 180 - np.rad2deg(float(first_line.angle_between(second_line)))
+
+
+def get_angle_by_idx(angles, idx):
+    for a in angles:
+        if idx == a[1][1]:
+            return a[0]
+
+
+def get_pt_by_idx(angles, idx):
+    for a in angles:
+        if idx == a[1][1]:
+            return a[2][0][1]
 
 
 if __name__ == "__main__":
@@ -239,12 +255,212 @@ if __name__ == "__main__":
         h = plot_border_corrected_(img.copy(), points)
 
         tol_real = 2.2058823529411766
+        # tol_real = 1.7
         tol = np.hypot(img.shape[0], img.shape[1]) * 0.01 * tol_real
-        points_grouped = group_points(points, tol=tol)
-        h = plot_border_corrected_(img.copy(), points_grouped)
+        points = group_points(points, tol=tol)
+        h = plot_border_corrected_(img.copy(), points)
+
+        ###
+        img_plot = img.copy()
+        if len(points) > 2:
+            angles = []
+            for prev_i in range(0, len(points) - 2):
+                prev_pt = points[prev_i]
+                now_pt = points[prev_i + 1]
+                next_pt = points[prev_i + 2]
+
+                first_line = [prev_pt, now_pt]
+                second_line = [now_pt, next_pt]
+
+                l_1 = np.array(first_line).astype(int)
+                l_2 = np.array(second_line).astype(int)
+                img_plot = cv2.line(
+                    img_plot, tuple(l_1[0]), tuple(l_1[1]), (255, 0, 255), thickness=3
+                )
+                img_plot = cv2.line(
+                    img_plot, tuple(l_2[0]), tuple(l_2[1]), (255, 0, 255), thickness=3
+                )
+
+                angle = get_angle_between_two_lines(first_line, second_line)
+                angles.append(
+                    (
+                        abs(90 - angle),
+                        (prev_i, prev_i + 1, prev_i + 2),
+                        (first_line, second_line),
+                    )
+                )
+
+            prev_pt = points[prev_i + 1]
+            now_pt = points[prev_i + 2]
+            next_pt = points[0]
+
+            first_line = [prev_pt, now_pt]
+            second_line = [now_pt, next_pt]
+
+            l_1 = np.array(first_line).astype(int)
+            l_2 = np.array(second_line).astype(int)
+            img_plot = cv2.line(
+                img_plot, tuple(l_1[0]), tuple(l_1[1]), (255, 255, 0), thickness=3
+            )
+            img_plot = cv2.line(
+                img_plot, tuple(l_2[0]), tuple(l_2[1]), (255, 255, 0), thickness=3
+            )
+
+            angle = get_angle_between_two_lines(first_line, second_line)
+            angles.append(
+                (
+                    abs(90 - angle),
+                    (prev_i + 1, prev_i + 2, 0),
+                    (first_line, second_line),
+                )
+            )
+
+            prev_pt = points[prev_i + 2]
+            now_pt = points[0]
+            next_pt = points[1]
+
+            first_line = [prev_pt, now_pt]
+            second_line = [now_pt, next_pt]
+
+            l_1 = np.array(first_line).astype(int)
+            l_2 = np.array(second_line).astype(int)
+            img_plot = cv2.line(
+                img_plot, tuple(l_1[0]), tuple(l_1[1]), (0, 255, 255), thickness=3
+            )
+            img_plot = cv2.line(
+                img_plot, tuple(l_2[0]), tuple(l_2[1]), (0, 255, 255), thickness=3
+            )
+
+            angle = get_angle_between_two_lines(first_line, second_line)
+            angles.append(
+                (abs(90 - angle), (prev_i + 2, 0, 1), (first_line, second_line))
+            )
+
+            angles_sorted = sorted(angles, key=lambda x: x[0])
+            close_90_cluster = angles_sorted[:4]
+
+            for i in close_90_cluster:
+                l_1 = np.array(i[-1][0]).astype(int)
+                l_2 = np.array(i[-1][1]).astype(int)
+                img_plot = cv2.line(
+                    img_plot, tuple(l_1[0]), tuple(l_1[1]), (0, 255, 0), thickness=3
+                )
+                img_plot = cv2.line(
+                    img_plot, tuple(l_2[0]), tuple(l_2[1]), (0, 255, 0), thickness=3
+                )
+                img_plot = cv2.putText(
+                    img_plot,
+                    str(int(i[0])),
+                    (l_1[1][0] + 50, l_1[1][1] + 100),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1,
+                    (0, 0, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
+
+            close_90_cluster_pts = np.array([_[-1][0][1] for _ in close_90_cluster])
+            picks_clockwised = order_points_clockwise(close_90_cluster_pts)
+            close_90_cluster_sorted = []
+            for pick in picks_clockwised:
+                c_i = np.argwhere(np.sum(close_90_cluster_pts == pick, axis=1) == 2)[0][
+                    0
+                ]
+                c = close_90_cluster[c_i]
+                close_90_cluster_sorted.append(c)
+
+            # change near pts (~ 90 deg)
+            tol_ang = 8
+            for num, c in enumerate(close_90_cluster_sorted):
+                pts = c[2][0][1]
+                pts_l = c[2][0][0]
+                pts_r = c[2][1][1]
+                ang = c[0]
+                diff_ang_l = None
+                diff_ang_r = None
+
+                if num == 0:
+                    if pts_l[0] < pts[0]:
+                        idx_l = c[1][0]
+                        ang_l = get_angle_by_idx(angles_sorted, idx_l)
+                        if abs(ang_l - ang) < tol_ang:
+                            diff_ang_l = abs(ang_l - ang)
+
+                    if pts_r[1] < pts[1]:
+                        idx_r = c[1][2]
+                        ang_r = get_angle_by_idx(angles_sorted, idx_r)
+                        if abs(ang_r - ang) < tol_ang:
+                            diff_ang_r = abs(ang_r - ang)
+
+                elif num == 1:
+                    if pts_l[0] > pts[0]:
+                        idx_l = c[1][0]
+                        ang_l = get_angle_by_idx(angles_sorted, idx_l)
+                        if abs(ang_l - ang) < tol_ang:
+                            diff_ang_l = abs(ang_l - ang)
+
+                    if pts_r[1] < pts[1]:
+                        idx_r = c[1][2]
+                        ang_r = get_angle_by_idx(angles_sorted, idx_r)
+                        if abs(ang_r - ang) < tol_ang:
+                            diff_ang_r = abs(ang_r - ang)
+
+                elif num == 2:
+                    if pts_l[0] > pts[0]:
+                        idx_l = c[1][0]
+                        ang_l = get_angle_by_idx(angles_sorted, idx_l)
+                        if abs(ang_l - ang) < tol_ang:
+                            diff_ang_l = abs(ang_l - ang)
+
+                    if pts_r[1] > pts[1]:
+                        idx_r = c[1][2]
+                        ang_r = get_angle_by_idx(angles_sorted, idx_r)
+                        if abs(ang_r - ang) < tol_ang:
+                            diff_ang_r = abs(ang_r - ang)
+
+                elif num == 3:
+                    if pts_l[0] < pts[0]:
+                        idx_l = c[1][0]
+                        ang_l = get_angle_by_idx(angles_sorted, idx_l)
+                        if abs(ang_l - ang) < tol_ang:
+                            diff_ang_l = abs(ang_l - ang)
+
+                    if pts_r[1] > pts[1]:
+                        idx_r = c[1][2]
+                        ang_r = get_angle_by_idx(angles_sorted, idx_r)
+                        if abs(ang_r - ang) < tol_ang:
+                            diff_ang_r = abs(ang_r - ang)
+
+                if (diff_ang_l is not None) and (diff_ang_r is not None):
+                    if diff_ang_l > diff_ang_r:
+                        picks_clockwised[num][1] = get_pt_by_idx(angles, idx_r)[1]
+                    else:
+                        picks_clockwised[num][0] = get_pt_by_idx(angles, idx_l)[0]
+
+                elif diff_ang_l is not None:
+                    picks_clockwised[num][0] = get_pt_by_idx(angles, idx_l)[0]
+
+                elif diff_ang_r is not None:
+                    picks_clockwised[num][1] = get_pt_by_idx(angles, idx_r)[1]
+
+            for p in picks_clockwised:
+                p = np.array(p).astype(int)
+                img_plot = cv2.circle(
+                    img_plot, (p[0], p[1]), radius=20, color=(0, 0, 255), thickness=-1
+                )
+
+            img_plot = cv2.polylines(
+                img_plot,
+                [np.array(picks_clockwised).astype(int)],
+                True,
+                (0, 255, 0),
+                thickness=6,
+            )
+        Image.fromarray(img_plot[:, :, ::-1]).show()
+        ###
 
         img_plot = img.copy()
-        for n, p in enumerate(points_grouped):
+        for n, p in enumerate(points):
             p = np.array(p).astype(int)
             img_plot = cv2.circle(
                 img_plot, (p[0], p[1]), radius=10, color=(255, 255, 0), thickness=-1
@@ -259,7 +475,7 @@ if __name__ == "__main__":
                 2,
                 cv2.LINE_AA,
             )
-
-        un_warped, cropped = dewarp(image=img, pts_src=points_grouped)
+        Image.fromarray(img_plot[:, :, ::-1]).show()
+        un_warped, cropped = dewarp(image=img, pts_src=picks_clockwised)
         # Image.fromarray(un_warped[:, :, ::-1]).show()
         Image.fromarray(cropped[:, :, ::-1]).show()
