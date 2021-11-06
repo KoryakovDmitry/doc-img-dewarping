@@ -2,14 +2,10 @@ import math
 from copy import deepcopy
 import numpy as np
 from sympy.geometry import Line, Point2D
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import MinMaxScaler
-from joblib import Parallel, delayed
 from segmentation import (
     Segmentator,
     plot_border_corrected as plot_border_corrected_,
 )
-from shapely.geometry import Polygon
 import cv2
 from PIL import Image
 
@@ -512,4 +508,4 @@ if __name__ == "__main__":
         im_fn = osp.basename(im_path)
         img = cv2.imread(im_path)
 
-        out_img = ht.inference(img=img, debug_plot=False)
+        out_img = ht.inference(img=img, debug_plot=True)
