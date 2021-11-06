@@ -1,16 +1,11 @@
-from detectron2.utils.visualizer import ColorMode
 from copy import deepcopy
 from PIL import Image
 
-# import some common libraries
 import cv2
-from glob import glob
 
-# import some common detectron2 utilities
 from detectron2 import model_zoo
 from detectron2.engine import DefaultPredictor
 
-from detectron2.utils.visualizer import Visualizer
 import os
 import os.path as osp
 
@@ -19,9 +14,6 @@ from detectron2.config import get_cfg
 import numpy as np
 from skimage import measure
 from skimage.measure import approximate_polygon
-
-# Inference should use the config with parameters that are used in training
-# cfg now already contains everything we've set previously. We changed it a little bit for inference:
 
 
 def plot_border_corrected(img_plot, destination_pts_, add_x=0, add_y=0):
@@ -68,7 +60,7 @@ def plot_border_corrected(img_plot, destination_pts_, add_x=0, add_y=0):
     return img_plot
 
 
-class SegmInference:
+class Segmentator:
     def __init__(self):
         cfg = get_cfg()
         cfg.OUTPUT_DIR = osp.join(os.getcwd(), "dewarp_homo/weights")
@@ -83,7 +75,8 @@ class SegmInference:
         cfg.DATALOADER.NUM_WORKERS = 2
         cfg.MODEL.WEIGHTS = os.path.join(
             # cfg.OUTPUT_DIR, "model_final.pth"
-            cfg.OUTPUT_DIR, "model_final_3000.pth"
+            cfg.OUTPUT_DIR,
+            "model_final_3000.pth",
         )  # path to the model we just trained
         cfg.SOLVER.IMS_PER_BATCH = 2
         cfg.SOLVER.BASE_LR = 0.00025  # pick a good LR
@@ -128,6 +121,10 @@ class SegmInference:
 
 
 if __name__ == "__main__":
+    from detectron2.utils.visualizer import Visualizer
+    from glob import glob
+    from detectron2.utils.visualizer import ColorMode
+
     imgs_path = glob("/Users/dmitry/Initflow/doc-img-dewarping/test_imgs/*")
     for i_p in imgs_path:
         im = cv2.imread(i_p)
@@ -194,5 +191,3 @@ if __name__ == "__main__":
         img = out.get_image()
 
         Image.fromarray(img).show()
-
-        k = None
