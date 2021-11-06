@@ -18,7 +18,7 @@ from detectron2.config import get_cfg
 
 import numpy as np
 from skimage import measure
-from rdp import rdp
+from skimage.measure import approximate_polygon
 
 # Inference should use the config with parameters that are used in training
 # cfg now already contains everything we've set previously. We changed it a little bit for inference:
@@ -82,7 +82,8 @@ class SegmInference:
         cfg.TEST.EVAL_PERIOD = 100
         cfg.DATALOADER.NUM_WORKERS = 2
         cfg.MODEL.WEIGHTS = os.path.join(
-            cfg.OUTPUT_DIR, "model_final.pth"
+            # cfg.OUTPUT_DIR, "model_final.pth"
+            cfg.OUTPUT_DIR, "model_final_3000.pth"
         )  # path to the model we just trained
         cfg.SOLVER.IMS_PER_BATCH = 2
         cfg.SOLVER.BASE_LR = 0.00025  # pick a good LR
@@ -115,7 +116,7 @@ class SegmInference:
 
             polygons.append(coords)
 
-        points = rdp(np.array(polygons[0]), epsilon=eps)
+        points = approximate_polygon(np.array(polygons[0]), tolerance=eps)
 
         points_new = []
         for p in points:
@@ -177,7 +178,7 @@ if __name__ == "__main__":
 
             polygons.append(coords)
 
-        polygons = rdp(np.array(polygons[0]), epsilon=0.999999999999)
+        polygons = approximate_polygon(np.array(polygons[0]), tolerance=0.999999999999)
 
         im_plot = im.copy()
         im_plot = plot_border_corrected(im_plot, destination_pts_=polygons)
