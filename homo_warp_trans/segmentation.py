@@ -15,6 +15,9 @@ import numpy as np
 from skimage import measure
 from skimage.measure import approximate_polygon
 
+MODELS_WS_PATH = osp.join(os.getcwd(), "homo_warp_trans/weights/")
+MODEL_NAME = "model_final_3000.pth"
+
 
 def plot_border_corrected(img_plot, destination_pts_, add_x=0, add_y=0):
     destination_pts_list = deepcopy([list(i) for i in destination_pts_])
@@ -54,16 +57,16 @@ def plot_border_corrected(img_plot, destination_pts_, add_x=0, add_y=0):
     )
     Image.fromarray(img_plot[:, :, ::-1]).show()
 
-    # save_to = f"/Users/dmitry/Initflow/doc-img-dewarping/dewarp_homo/"
+    # save_to = f"/Users/dmitry/Initflow/doc-img-dewarping/homo_warp_trans/"
     # name = str(points_[0]).replace(",", "").replace(".", "").replace(" ", "").replace("[", "").replace("]", "")+".jpg"
     # cv2.imwrite(osp.join(save_to, name), img_plot)
     return img_plot
 
 
 class Segmentator:
-    def __init__(self):
+    def __init__(self, models_ws_path=MODELS_WS_PATH, model_name=MODEL_NAME):
         cfg = get_cfg()
-        cfg.OUTPUT_DIR = osp.join(os.getcwd(), "dewarp_homo/weights")
+        cfg.OUTPUT_DIR = models_ws_path
         cfg.merge_from_file(
             model_zoo.get_config_file(
                 "COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"
@@ -76,7 +79,7 @@ class Segmentator:
         cfg.MODEL.WEIGHTS = os.path.join(
             # cfg.OUTPUT_DIR, "model_final.pth"
             cfg.OUTPUT_DIR,
-            "model_final_3000.pth",
+            model_name,
         )  # path to the model we just trained
         cfg.SOLVER.IMS_PER_BATCH = 2
         cfg.SOLVER.BASE_LR = 0.00025  # pick a good LR

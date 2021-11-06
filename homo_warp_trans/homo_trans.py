@@ -65,7 +65,7 @@ def plot_border_corrected(img_plot, destination_pts_, points_, add_x=0, add_y=0)
 
     Image.fromarray(img_plot[:, :, ::-1]).show()
 
-    # save_to = f"/Users/dmitry/Initflow/doc-img-dewarping/dewarp_homo/"
+    # save_to = f"/Users/dmitry/Initflow/doc-img-dewarping/homo_warp_trans/"
     # name = str(points_[0]).replace(",", "").replace(".", "").replace(" ", "").replace("[", "").replace("]", "")+".jpg"
     # cv2.imwrite(osp.join(save_to, name), img_plot)
     return img_plot
