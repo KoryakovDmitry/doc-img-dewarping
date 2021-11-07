@@ -128,7 +128,8 @@ if __name__ == "__main__":
     from glob import glob
     from detectron2.utils.visualizer import ColorMode
 
-    imgs_path = glob("/Users/dmitry/Initflow/doc-img-dewarping/test_imgs/*")
+    imgs_path = glob("/Users/dmitry/Initflow/doc-img-dewarping/output_orig/*")
+    # imgs_path = glob("/Users/dmitry/Initflow/doc-img-dewarping/test_imgs/*")
     for i_p in imgs_path:
         im = cv2.imread(i_p)
         from datetime import datetime
@@ -163,25 +164,25 @@ if __name__ == "__main__":
 
         c = datetime.now()
         outputs = predictor(im)
-        mask = np.transpose(
-            outputs["instances"]._fields["pred_masks"].numpy()[0], (1, 0)
-        )
-        mask = mask.astype(np.uint8)
-        contours = measure.find_contours(mask, 0.5)
-
-        polygons = []
-        for object in contours:
-            coords = []
-
-            for point in object:
-                coords.append([int(point[0]), int(point[1])])
-
-            polygons.append(coords)
-
-        polygons = approximate_polygon(np.array(polygons[0]), tolerance=0.999999999999)
-
-        im_plot = im.copy()
-        im_plot = plot_border_corrected(im_plot, destination_pts_=polygons)
+        # mask = np.transpose(
+        #     outputs["instances"]._fields["pred_masks"].numpy()[0], (1, 0)
+        # )
+        # mask = mask.astype(np.uint8)
+        # contours = measure.find_contours(mask, 0.5)
+        #
+        # polygons = []
+        # for object in contours:
+        #     coords = []
+        #
+        #     for point in object:
+        #         coords.append([int(point[0]), int(point[1])])
+        #
+        #     polygons.append(coords)
+        #
+        # polygons = approximate_polygon(np.array(polygons[0]), tolerance=0.999999999999)
+        #
+        # im_plot = im.copy()
+        # im_plot = plot_border_corrected(im_plot, destination_pts_=polygons)
 
         print(datetime.now() - c)
         v = Visualizer(
@@ -193,4 +194,5 @@ if __name__ == "__main__":
         out = v.draw_instance_predictions(outputs["instances"].to("cpu"))
         img = out.get_image()
 
-        Image.fromarray(img).show()
+        # Image.fromarray(img).show()
+        cv2.imwrite(osp.join("/Users/dmitry/Initflow/doc-img-dewarping/segm_out", osp.basename(i_p)), img)
