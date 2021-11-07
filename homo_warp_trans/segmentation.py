@@ -12,7 +12,6 @@ import os.path as osp
 from detectron2.config import get_cfg
 
 import numpy as np
-from skimage import measure
 from skimage.measure import approximate_polygon
 
 MODELS_WS_PATH = osp.join(os.getcwd(), "homo_warp_trans/weights/")
@@ -55,7 +54,7 @@ def plot_border_corrected(img_plot, destination_pts_, add_x=0, add_y=0):
         (255, 0, 0),
         thickness=3,
     )
-    Image.fromarray(img_plot[:, :, ::-1]).show()
+    # Image.fromarray(img_plot[:, :, ::-1]).show()
 
     # save_to = f"/Users/dmitry/Initflow/doc-img-dewarping/homo_warp_trans/"
     # name = str(points_[0]).replace(",", "").replace(".", "").replace(" ", "").replace("[", "").replace("]", "")+".jpg"
@@ -101,18 +100,11 @@ class Segmentator:
             outputs["instances"]._fields["pred_masks"].numpy()[0], (1, 0)
         )
         mask = mask.astype(np.uint8)
-        contours = measure.find_contours(mask, 0.5)
+        contours, hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        contours = max(contours, key=cv2.contourArea)
+        points = contours[:, 0, ::-1]
 
-        polygons = []
-        for object in contours:
-            coords = []
-
-            for point in object:
-                coords.append([int(point[0]), int(point[1])])
-
-            polygons.append(coords)
-
-        points = approximate_polygon(np.array(polygons[0]), tolerance=eps)
+        points = approximate_polygon(points, tolerance=eps)
 
         points_new = []
         for p in points:
