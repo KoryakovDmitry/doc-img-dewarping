@@ -2,7 +2,7 @@ import math
 from copy import deepcopy
 import numpy as np
 from sympy.geometry import Line, Point2D
-from segmentation import (
+from .segmentation import (
     Segmentator,
     plot_border_corrected as plot_border_corrected_,
 )
