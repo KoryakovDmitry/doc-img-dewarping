@@ -236,6 +236,8 @@ class HomographyTrans:
         main_hypot = np.hypot(img.shape[0], img.shape[1])
         tol = main_hypot * self.tol_perc
         points = self.segm.inference(img)
+        if points is None:
+            return img, img
         points = group_points(points, tol=tol)
         points = np.array(points)
 
@@ -252,7 +254,7 @@ class HomographyTrans:
         if debug_plot:
             h = plot_border_corrected_(img.copy(), points)
 
-        if len(points) > 2:
+        if len(points) > 3:
             angles = []
 
             if debug_plot:
@@ -427,7 +429,7 @@ class HomographyTrans:
                 # Image.fromarray(cropped[:, :, ::-1]).show()
                 pass
             return cropped, h
-        return img, None
+        return img, img
 
 
 if __name__ == "__main__":
@@ -438,7 +440,8 @@ if __name__ == "__main__":
 
     ht = HomographyTrans()
     base = os.getcwd()
-    imgs = glob("/Users/dmitry/Initflow/doc-img-dewarping/output_orig/*")
+    # imgs = glob("/Users/dmitry/Initflow/doc-img-dewarping/output_orig/*")
+    imgs = glob("/Users/dmitry/Initflow/doc-img-dewarping/imgs_bugs/*")
     # imgs = glob(osp.join(base, "test_imgs/*"))
     # anns_dir = osp.join(base, "test_anns_4_pts/")
     anns_dir = osp.join(base, "test_anns/")

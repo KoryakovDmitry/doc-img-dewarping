@@ -96,23 +96,26 @@ class Segmentator:
 
     def inference(self, im, eps=0.999999999999):
         outputs = self.predictor(im)
-        mask = np.transpose(
-            outputs["instances"]._fields["pred_masks"].numpy()[0], (1, 0)
-        )
-        mask = mask.astype(np.uint8)
-        contours, hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-        contours = max(contours, key=cv2.contourArea)
-        points = contours[:, 0, ::-1]
+        if outputs["instances"]._fields["pred_masks"].shape[0] != 0:
+            mask = np.transpose(
+                outputs["instances"]._fields["pred_masks"].numpy()[0], (1, 0)
+            )
+            mask = mask.astype(np.uint8)
+            contours, hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+            contours = max(contours, key=cv2.contourArea)
+            points = contours[:, 0, ::-1]
 
-        points = approximate_polygon(points, tolerance=eps)
+            points = approximate_polygon(points, tolerance=eps)
 
-        points_new = []
-        for p in points:
-            p = p.tolist()
-            if p not in points_new:
-                points_new.append(p)
+            points_new = []
+            for p in points:
+                p = p.tolist()
+                if p not in points_new:
+                    points_new.append(p)
 
-        return points_new
+            return points_new
+        else:
+            return None
 
 
 if __name__ == "__main__":
