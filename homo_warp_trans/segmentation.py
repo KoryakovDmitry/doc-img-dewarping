@@ -15,7 +15,8 @@ import numpy as np
 from skimage.measure import approximate_polygon
 
 MODELS_WS_PATH = osp.join(os.getcwd(), "homo_warp_trans/weights/")
-MODEL_NAME = "model_final_3000.pth"
+# MODEL_NAME = "model_final_3000.pth"
+MODEL_NAME = "model_final_4000.pth"
 
 
 def plot_border_corrected(img_plot, destination_pts_, add_x=0, add_y=0):
@@ -76,7 +77,7 @@ class Segmentator:
         cfg.TEST.EVAL_PERIOD = 100
         cfg.DATALOADER.NUM_WORKERS = 2
         cfg.MODEL.WEIGHTS = os.path.join(
-            # cfg.OUTPUT_DIR, "model_final.pth"
+            # cfg.OUTPUT_DIR, "model_final_4000.pth"
             cfg.OUTPUT_DIR,
             model_name,
         )  # path to the model we just trained
@@ -101,7 +102,9 @@ class Segmentator:
                 outputs["instances"]._fields["pred_masks"].numpy()[0], (1, 0)
             )
             mask = mask.astype(np.uint8)
-            contours, hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+            contours, hierarchy = cv2.findContours(
+                mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
+            )
             contours = max(contours, key=cv2.contourArea)
             points = contours[:, 0, ::-1]
 
@@ -123,7 +126,8 @@ if __name__ == "__main__":
     from glob import glob
     from detectron2.utils.visualizer import ColorMode
 
-    imgs_path = glob("/Users/dmitry/Initflow/doc-img-dewarping/output_orig/*")
+    # imgs_path = glob("/Users/dmitry/Initflow/doc-img-dewarping/output_orig/*")
+    imgs_path = glob("/Users/dmitry/Initflow/doc-img-dewarping/imgs_bugs/*PaPd*")
     # imgs_path = glob("/Users/dmitry/Initflow/doc-img-dewarping/test_imgs/*")
     for i_p in imgs_path:
         im = cv2.imread(i_p)
@@ -141,7 +145,7 @@ if __name__ == "__main__":
         cfg.TEST.EVAL_PERIOD = 100
         cfg.DATALOADER.NUM_WORKERS = 2
         cfg.MODEL.WEIGHTS = os.path.join(
-            cfg.OUTPUT_DIR, "model_final.pth"
+            cfg.OUTPUT_DIR, "model_final_4000.pth"
         )  # path to the model we just trained
         cfg.SOLVER.IMS_PER_BATCH = 2
         cfg.SOLVER.BASE_LR = 0.00025  # pick a good LR
@@ -190,4 +194,9 @@ if __name__ == "__main__":
         img = out.get_image()
 
         # Image.fromarray(img).show()
-        cv2.imwrite(osp.join("/Users/dmitry/Initflow/doc-img-dewarping/segm_out", osp.basename(i_p)), img)
+        cv2.imwrite(
+            osp.join(
+                "/Users/dmitry/Initflow/doc-img-dewarping/segm_out", osp.basename(i_p)
+            ),
+            img,
+        )

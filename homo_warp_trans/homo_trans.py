@@ -2,6 +2,8 @@ import math
 from copy import deepcopy
 import numpy as np
 from sympy.geometry import Line, Point2D
+
+# from segmentation import (
 from .segmentation import (
     Segmentator,
     plot_border_corrected as plot_border_corrected_,
@@ -240,6 +242,8 @@ class HomographyTrans:
             return img, img
         points = group_points(points, tol=tol)
         points = np.array(points)
+        if debug_plot:
+            h = plot_border_corrected_(img.copy(), points)
 
         # rect_all = []
         # for pi1, pi2, pi3, pi4 in combinations(range(0, points.shape[0]), r=4):
@@ -250,9 +254,6 @@ class HomographyTrans:
         idxs_poly_max = max(
             combinations(range(0, points.shape[0]), r=4), key=l_get_max_poly4
         )
-
-        if debug_plot:
-            h = plot_border_corrected_(img.copy(), points)
 
         if len(points) > 3:
             angles = []
@@ -441,7 +442,7 @@ if __name__ == "__main__":
     ht = HomographyTrans()
     base = os.getcwd()
     # imgs = glob("/Users/dmitry/Initflow/doc-img-dewarping/output_orig/*")
-    imgs = glob("/Users/dmitry/Initflow/doc-img-dewarping/imgs_bugs/*")
+    imgs = glob("/Users/dmitry/Initflow/doc-img-dewarping/imgs_bugs/*PaPd*")
     # imgs = glob(osp.join(base, "test_imgs/*"))
     # anns_dir = osp.join(base, "test_anns_4_pts/")
     anns_dir = osp.join(base, "test_anns/")
