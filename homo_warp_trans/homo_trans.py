@@ -232,7 +232,7 @@ class HomographyTrans:
         self.segm = Segmentator()
         # self.tol_perc = 2.2058823529411766 * 0.01
         self.tol_perc = 5.0 * 0.01
-        self.tol_orig_perc = 2.5 * 0.01
+        self.tol_orig_perc = 2.7 * 0.01
 
     def inference(self, img: np.array, debug_plot=True):
         main_hypot = np.hypot(img.shape[0], img.shape[1])
@@ -383,34 +383,38 @@ class HomographyTrans:
                 )
                 # Image.fromarray(h[:, :, ::-1]).show()
 
-            dist_pt1 = np.hypot(
+            dist_pt1 = (
                 abs(picks_clockwised[0][0] - 0),
                 abs(picks_clockwised[0][1] - 0),
             )
-            dist_pt2 = np.hypot(
+            dist_pt2 = (
                 abs(picks_clockwised[1][0] - img.shape[1]),
                 abs(picks_clockwised[1][1] - 0),
             )
-            dist_pt3 = np.hypot(
+            dist_pt3 = (
                 abs(picks_clockwised[2][0] - img.shape[1]),
                 abs(picks_clockwised[2][1] - img.shape[0]),
             )
-            dist_pt4 = np.hypot(
+            dist_pt4 = (
                 abs(picks_clockwised[3][0] - 0),
                 abs(picks_clockwised[3][1] - img.shape[0]),
             )
             tol_orig = self.tol_orig_perc * main_hypot
-            if dist_pt1 < tol_orig:
+            if dist_pt1[0] < tol_orig:
                 picks_clockwised[0][0] = 0
+            if dist_pt1[1] < tol_orig:
                 picks_clockwised[0][1] = 0
-            if dist_pt2 < tol_orig:
+            if dist_pt2[0] < tol_orig:
                 picks_clockwised[1][0] = img.shape[1]
+            if dist_pt2[1] < tol_orig:
                 picks_clockwised[1][1] = 0
-            if dist_pt3 < tol_orig:
+            if dist_pt3[0] < tol_orig:
                 picks_clockwised[2][0] = img.shape[1]
+            if dist_pt3[1] < tol_orig:
                 picks_clockwised[2][1] = img.shape[0]
-            if dist_pt4 < tol_orig:
+            if dist_pt4[0] < tol_orig:
                 picks_clockwised[3][0] = 0
+            if dist_pt4[1] < tol_orig:
                 picks_clockwised[3][1] = img.shape[0]
 
             if debug_plot:
@@ -442,7 +446,7 @@ if __name__ == "__main__":
     ht = HomographyTrans()
     base = os.getcwd()
     # imgs = glob("/Users/dmitry/Initflow/doc-img-dewarping/output_orig/*")
-    imgs = glob("/Users/dmitry/Initflow/doc-img-dewarping/imgs_bugs/*PaPd*")
+    imgs = glob("/Users/dmitry/Initflow/doc-img-dewarping/imgs_bugs/*")
     # imgs = glob(osp.join(base, "test_imgs/*"))
     # anns_dir = osp.join(base, "test_anns_4_pts/")
     anns_dir = osp.join(base, "test_anns/")
