@@ -3,8 +3,8 @@ from copy import deepcopy
 import numpy as np
 from sympy.geometry import Line, Point2D
 
-# from segmentation import (
 from .segmentation import (
+# from segmentation import (
     Segmentator,
     plot_border_corrected as plot_border_corrected_,
 )
@@ -227,6 +227,87 @@ def get_max_poly4(idxs, points):
     return p.area
 
 
+def polyg(start, end, l):
+    i = start
+    pts = []
+    if end == 0:
+        end = l
+    while True:
+        if i == end - 1:
+            break
+        pts.append(i)
+
+        if i == 0:
+            i = l - 1
+        else:
+            i -= 1
+    return pts
+
+
+def below_above_line_filter(line, pts, side):
+    new_points = []
+    line = np.array(line)
+    v1 = (line[1][0] - line[0][0], line[1][1] - line[0][1])  # Vector 1
+    for pt in pts:
+        pt = np.array(pt)
+        v2 = (pt[0] - line[0][0], pt[1] - line[0][1])  # Vector 1
+        xp = v1[0] * v2[1] - v1[1] * v2[0]  # Cross product
+        if xp > 0:
+            pass
+        elif xp < 0:
+            if side in ("r", "b", "l", "t"):
+                # below
+                new_points.append(pt)
+        else:
+            # same
+            new_points.append(pt)
+    return np.array(new_points)
+
+
+def split_pts(pts, border_pt, side, img_plot, debug_plot):
+    if side == "t":
+        border_pt_c = (border_pt[1][0] - border_pt[0][0]) / 2
+    elif side == "r":
+        border_pt_c = (border_pt[1][1] - border_pt[0][1]) / 2
+    elif side == "b":
+        border_pt_c = (border_pt[0][0] - border_pt[1][0]) / 2
+    else:
+        border_pt_c = (border_pt[0][1] - border_pt[1][1]) / 2
+
+    left = []
+    right = []
+
+    for pt in pts:
+        if side in ("t", "b"):
+            pt_c = pt[0]
+        else:
+            pt_c = pt[1]
+
+        if pt_c < border_pt_c:
+            left.append(pt)
+        else:
+            right.append(pt)
+
+    if debug_plot:
+        for p in left:
+            img_plot = cv2.circle(
+                img_plot,
+                (int(p[0]), int(p[1])),
+                radius=10,
+                color=(100, 100, 100),
+                thickness=-1,
+            )
+        for p in right:
+            img_plot = cv2.circle(
+                img_plot,
+                (int(p[0]), int(p[1])),
+                radius=10,
+                color=(255, 50, 150),
+                thickness=-1,
+            )
+    return left, right, img_plot
+
+
 class HomographyTrans:
     def __init__(self):
         self.segm = Segmentator()
@@ -245,6 +326,18 @@ class HomographyTrans:
         if debug_plot:
             h = plot_border_corrected_(img.copy(), points)
 
+        for n, p in enumerate(points):
+            h = cv2.putText(
+                h,
+                str(n),
+                (p[0] + 50, p[1] + 50),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (0, 255, 0),
+                2,
+                cv2.LINE_AA,
+            )
+
         # rect_all = []
         # for pi1, pi2, pi3, pi4 in combinations(range(0, points.shape[0]), r=4):
         #     p1, p2, p3, p4 = points[pi1], points[pi2], points[pi3], points[pi4]
@@ -256,122 +349,106 @@ class HomographyTrans:
         )
 
         if len(points) > 3:
-            angles = []
-
-            if debug_plot:
-                img_plot = img.copy()
-
-            for prev_i in range(0, len(points) - 2):
-                prev_pt = points[prev_i]
-                now_pt = points[prev_i + 1]
-                next_pt = points[prev_i + 2]
-
-                first_line = [prev_pt, now_pt]
-                second_line = [now_pt, next_pt]
-
-                l_1 = np.array(first_line).astype(int)
-                l_2 = np.array(second_line).astype(int)
-
-                if debug_plot:
-                    img_plot = cv2.line(
-                        img_plot,
-                        tuple(l_1[0]),
-                        tuple(l_1[1]),
-                        (255, 0, 255),
-                        thickness=3,
-                    )
-                    img_plot = cv2.line(
-                        img_plot,
-                        tuple(l_2[0]),
-                        tuple(l_2[1]),
-                        (255, 0, 255),
-                        thickness=3,
-                    )
-
-                angles.append(
-                    (
-                        (prev_i, prev_i + 1, prev_i + 2),
-                        (first_line, second_line),
-                    )
-                )
-
-            prev_pt = points[prev_i + 1]
-            now_pt = points[prev_i + 2]
-            next_pt = points[0]
-
-            first_line = [prev_pt, now_pt]
-            second_line = [now_pt, next_pt]
-
-            l_1 = np.array(first_line).astype(int)
-            l_2 = np.array(second_line).astype(int)
-            if debug_plot:
-                img_plot = cv2.line(
-                    img_plot, tuple(l_1[0]), tuple(l_1[1]), (255, 255, 0), thickness=3
-                )
-                img_plot = cv2.line(
-                    img_plot, tuple(l_2[0]), tuple(l_2[1]), (255, 255, 0), thickness=3
-                )
-
-            angles.append(
-                (
-                    (prev_i + 1, prev_i + 2, 0),
-                    (first_line, second_line),
-                )
-            )
-
-            prev_pt = points[prev_i + 2]
-            now_pt = points[0]
-            next_pt = points[1]
-
-            first_line = [prev_pt, now_pt]
-            second_line = [now_pt, next_pt]
-
-            l_1 = np.array(first_line).astype(int)
-            l_2 = np.array(second_line).astype(int)
-
-            if debug_plot:
-                img_plot = cv2.line(
-                    img_plot, tuple(l_1[0]), tuple(l_1[1]), (0, 255, 255), thickness=3
-                )
-                img_plot = cv2.line(
-                    img_plot, tuple(l_2[0]), tuple(l_2[1]), (0, 255, 255), thickness=3
-                )
-
-            angles.append(((prev_i + 2, 0, 1), (first_line, second_line)))
-
-            poly_max_ang = [get_angle_by_idx(angles, idx) for idx in idxs_poly_max]
-
             close_90_cluster_pts = points[[idxs_poly_max]]
             picks_clockwised = order_points_clockwise(close_90_cluster_pts)
-            close_90_cluster_sorted = []
-            for pick in picks_clockwised:
+            close_90_cluster_idxs_sorted = []
+            for i, pick in enumerate(picks_clockwised):
                 c_i = np.argwhere(np.sum(close_90_cluster_pts == pick, axis=1) == 2)[0][
                     0
                 ]
-                c = poly_max_ang[c_i]
-                close_90_cluster_sorted.append(c)
+                c = idxs_poly_max[c_i]
+                close_90_cluster_idxs_sorted.append(c)
 
-            # change near pts (~ 90 deg)
-            for num, c in enumerate(close_90_cluster_sorted):
-                pts = c[1][0][1]
-                pts_l = c[1][0][0]
-                pts_r = c[1][1][1]
+                if debug_plot:
+                    h = cv2.circle(
+                        h,
+                        (int(pick[0]), int(pick[1])),
+                        radius=10,
+                        color=(255, 255, 0),
+                        thickness=-1,
+                    )
+                    h = cv2.putText(
+                        h,
+                        str(int(i)),
+                        (int(pick[0]) + 50, int(pick[1]) + 100),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1,
+                        (0, 0, 255),
+                        2,
+                        cv2.LINE_AA,
+                    )
+            # if debug_plot:
+            #     h = cv2.polylines(
+            #         h,
+            #         [picks_clockwised.astype(int)],
+            #         True,
+            #         color=(0, 255, 255),
+            #         thickness=5,
+            #     )
+            if debug_plot:
+                h = cv2.polylines(
+                    h,
+                    [picks_clockwised.astype(int)],
+                    True,
+                    color=(0, 255, 0),
+                    thickness=5,
+                )
+                # Image.fromarray(h[:, :, ::-1]).show()
+            # add square around the polygon
 
-                if num == 0:
-                    picks_clockwised[num][0] = np.min([pts_l[0], pts[0], pts_r[0]])
-                    picks_clockwised[num][1] = np.min([pts_l[1], pts[1], pts_r[1]])
+            # choose direction
+            l = len(points)
+            idxs_top = polyg(
+                close_90_cluster_idxs_sorted[0], close_90_cluster_idxs_sorted[1], l=l
+            )
+            idxs_right = polyg(
+                close_90_cluster_idxs_sorted[1], close_90_cluster_idxs_sorted[2], l=l
+            )
+            idxs_bot = polyg(
+                close_90_cluster_idxs_sorted[2], close_90_cluster_idxs_sorted[3], l=l
+            )
+            idxs_left = polyg(
+                close_90_cluster_idxs_sorted[3], close_90_cluster_idxs_sorted[0], l=l
+            )
 
-                elif num == 1:
-                    picks_clockwised[num][0] = np.max([pts_l[0], pts[0], pts_r[0]])
-                    picks_clockwised[num][1] = np.min([pts_l[1], pts[1], pts_r[1]])
+            top = below_above_line_filter(
+                (picks_clockwised[0], picks_clockwised[1]), points[idxs_top], side="t"
+            )
+            right = below_above_line_filter(
+                (picks_clockwised[1], picks_clockwised[2]), points[idxs_right], side="r"
+            )
 
-                elif num == 2:
-                    picks_clockwised[num][0] = np.max([pts_l[0], pts[0], pts_r[0]])
-                    picks_clockwised[num][1] = np.max([pts_l[1], pts[1], pts_r[1]])
+            bot = below_above_line_filter(
+                (picks_clockwised[2], picks_clockwised[3]), points[idxs_bot], side="b"
+            )
+            left = below_above_line_filter(
+                (picks_clockwised[3], picks_clockwised[0]), points[idxs_left], side="l"
+            )
 
-                elif num == 3:
-                    picks_clockwised[num][0] = np.min([pts_l[0], pts[0], pts_r[0]])
-                    picks_clockwised[num][1] = np.max([pts_l[1], pts[1], pts_r[1]])
+            top_l, top_r, h = split_pts(top,
+                                     (picks_clockwised[0], picks_clockwised[1]),
+                                     side="t", img_plot=h, debug_plot=debug_plot)
+            right_l, right_r, h = split_pts(right,
+                                         (picks_clockwised[1], picks_clockwised[2]),
+                                         side="r", img_plot=h, debug_plot=debug_plot)
+            bot_l, bot_r, h = split_pts(bot,
+                                     (picks_clockwised[2], picks_clockwised[3]),
+                                     side="b", img_plot=h, debug_plot=debug_plot)
+            left_l, left_r, h = split_pts(left,
+                                       (picks_clockwised[3], picks_clockwised[0]),
+                                       side="l", img_plot=h, debug_plot=debug_plot)
+            if debug_plot:
+                # Image.fromarray(h[:, :, ::-1]).show()
+                pass
+
+            picks_clockwised[0][0] = np.min([picks_clockwised[0][0], ] + [_[0] for _ in top_l] + [_[0] for _ in left_l])
+            picks_clockwised[0][1] = np.min([picks_clockwised[0][1], ] + [_[1] for _ in top_l] + [_[1] for _ in left_l])
+            picks_clockwised[1][0] = np.max([picks_clockwised[1][0], ] + [_[0] for _ in top_r] + [_[0] for _ in right_l])
+            picks_clockwised[1][1] = np.min([picks_clockwised[1][1], ] + [_[1] for _ in top_r] + [_[1] for _ in right_l])
+            picks_clockwised[2][0] = np.max([picks_clockwised[2][0], ] + [_[0] for _ in right_r] + [_[0] for _ in bot_r])
+            picks_clockwised[2][1] = np.max([picks_clockwised[2][1], ] + [_[1] for _ in right_r] + [_[1] for _ in bot_r])
+            picks_clockwised[3][0] = np.min([picks_clockwised[3][0], ] + [_[0] for _ in bot_l] + [_[0] for _ in left_r])
+            picks_clockwised[3][1] = np.max([picks_clockwised[3][1], ] + [_[1] for _ in bot_l] + [_[1] for _ in left_r])
 
             if debug_plot:
                 h = cv2.polylines(
@@ -422,7 +499,7 @@ class HomographyTrans:
                     h,
                     [picks_clockwised.astype(int)],
                     True,
-                    color=(0, 255, 0),
+                    color=(21, 244, 252),
                     thickness=5,
                 )
                 # Image.fromarray(h[:, :, ::-1]).show()
@@ -442,16 +519,22 @@ if __name__ == "__main__":
     import os
     import os.path as osp
     from glob import glob
+    from tqdm import tqdm
 
     ht = HomographyTrans()
     base = os.getcwd()
     # imgs = glob("/Users/dmitry/Initflow/doc-img-dewarping/output_orig/*")
-    imgs = glob("/Users/dmitry/Initflow/doc-img-dewarping/imgs_bugs/*")
+    # imgs = glob("/Users/dmitry/Initflow/doc-img-dewarping/imgs_bugs/*")
+    imgs = glob("/Users/dmitry/Initflow/doc-img-dewarping/content/imgs_test_ht/*")
     # imgs = glob(osp.join(base, "test_imgs/*"))
     # anns_dir = osp.join(base, "test_anns_4_pts/")
     anns_dir = osp.join(base, "test_anns/")
-    for im_path in imgs:
-        # if "rot_invoices(apr1-10)-001_00113086_kAePHqov8KWFX82RrdRT_0" not in im_path:
+    for im_path in tqdm(imgs):
+        # if (
+        #     # "rot_invoices(apr1-10)-001_21042071_6SbTDzIQ2MnCP7Vj1ZJq_0.jpg"
+        #     "rot_invoices(apr1-10)-001_21006951_1Ooa07GmaxGJsTWesOd2_0.jpg"
+        #     not in im_path
+        # ):
         #     continue
         im_fn = osp.basename(im_path)
         img = cv2.imread(im_path)
@@ -459,14 +542,14 @@ if __name__ == "__main__":
         out_img, h = ht.inference(img=img, debug_plot=True)
         cv2.imwrite(
             osp.join(
-                "/Users/dmitry/Initflow/doc-img-dewarping/segm_out",
+                "/Users/dmitry/Initflow/doc-img-dewarping/content/segm_out",
                 osp.basename(im_path),
             ),
             out_img,
         )
         cv2.imwrite(
             osp.join(
-                "/Users/dmitry/Initflow/doc-img-dewarping/segm_out_red_poly",
+                "/Users/dmitry/Initflow/doc-img-dewarping/content/segm_out_red_poly",
                 osp.basename(im_path),
             ),
             h,
